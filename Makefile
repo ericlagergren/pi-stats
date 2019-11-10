@@ -1,8 +1,8 @@
 CC=g++
-CFLAGS=-std=c++17 -Ofast -Wall -Wextra -pedantic \
+CFLAGS=-std=c++17 -O2 -Wall -Wextra -pedantic \
 	   -I/opt/vc/include
 LDFLAGS=-L/opt/vc/lib -lbcm_host -lvcos -lvchiq_arm
-TARGET=pi-stats
+TARGET=rpi-stats
 DEST=$(HOME)/.local/bin
 
 .PHONY: all install clean
@@ -18,7 +18,7 @@ $(TARGET): $(OBJECT)
 
 install: $(TARGET)
 	mkdir -p $(DEST)
-	cp $< $(DEST)/prompt
+	cp $< $(DEST)/$(TARGET)
 
 clean:
 	$(RM) *~ *.o $(TARGET)

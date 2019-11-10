@@ -8,7 +8,10 @@
 #include <thread>
 #include <unordered_map>
 
+using namespace std::chrono_literals;
+
 extern "C" {
+#include <getopt.h>
 #include <unistd.h>
 
 #include <bcm_host.h>
@@ -17,7 +20,7 @@ extern "C" {
 
 void fatal(const std::string& msg) {
     std::cerr << msg << std::endl;
-    std::exit(1);
+    std::exit(EXIT_FAILURE);
 }
 
 void trim_prefix(std::string& s, const std::string& prefix) {
@@ -26,8 +29,13 @@ void trim_prefix(std::string& s, const std::string& prefix) {
     }
 }
 
+bool has_suffix(const std::string& s, const std::string suffix) {
+    return s.compare(s.length() - suffix.length(), suffix.length(), suffix) ==
+           0;
+}
+
 void trim_suffix(std::string& s, const std::string& suffix) {
-    if (s.compare(s.length() - suffix.length(), suffix.length(), suffix) == 0) {
+    if (has_suffix(s, suffix)) {
         s.erase(s.length() - suffix.length());
     }
 }
@@ -53,13 +61,15 @@ using VcFunc =
     std::function<void(std::string&, const std::string&, char*, size_t)>;
 
 struct Cmd {
-    Cmd(const std::string name, const std::optional<const std::string> arg,
-        VcFunc func)
+    Cmd(const std::string name, const std::string arg,
+        void (*func)(std::string&, const std::string&, char*, size_t))
         : name(name), arg(arg), func(func) {}
-    Cmd(const std::string name, VcFunc func) : name(name), func(func) {}
+    Cmd(const std::string name,
+        void (*func)(std::string&, const std::string&, char*, size_t))
+        : name(name), func(func) {}
     std::string name;
     std::optional<std::string> arg;
-    VcFunc func;
+    void (*func)(std::string&, const std::string&, char*, size_t);
 };
 
 void hostname(std::string& dst, const std::string&, char* buf, size_t len) {
@@ -79,8 +89,7 @@ void hostname(std::string& dst, const std::string&, char* buf, size_t len) {
     }
 }
 
-void measure_temp(std::string& dst, const std::string&, char* buf,
-                  [[maybe_unused]] size_t len) {
+void measure_temp(std::string& dst, const std::string&, char* buf, size_t len) {
     if (vc_gencmd(buf, len, "measure_temp")) {
         throw std::runtime_error("unable to measure CPU temperature");
     }
@@ -210,7 +219,27 @@ const std::unordered_map<std::string, Cmd> cmds = {
     /* {"mem_reloc_leg_blk_fail_C", Cmd("mem_reloc_stats", ...)}, */
 };
 
-int main(void) {
+const struct option long_opts[] = {{"step", required_argument, NULL, 's'},
+                                   {"help", no_argument, NULL, 'h'},
+                                   {NULL, 0, NULL, 0}};
+
+int main(int argc, char* argv[]) {
+    auto step = 1s;
+
+    int ch;
+    while ((ch = getopt_long(argc, argv, "s:h", long_opts, NULL)) != -1) {
+        switch (ch) {
+        case 's':
+            step = std::chrono::seconds(std::stoi(optarg));
+            break;
+        case 'h':
+            fatal("Usage: " + std::string(argv[0]) + " [-step seconds]");
+            break;
+        default:
+            return 1;
+        }
+    }
+
     vcos_init();
 
     VCHI_INSTANCE_T vchi_instance;
@@ -245,7 +274,7 @@ int main(void) {
         std::cout << buf << std::endl;
         buf.clear();
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::seconds(step));
     }
 
     vc_gencmd_stop();
