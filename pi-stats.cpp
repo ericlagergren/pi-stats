@@ -23,15 +23,39 @@ void fatal(const std::string& msg) {
     std::exit(EXIT_FAILURE);
 }
 
+bool has_prefix(const std::string& s, const std::string& prefix) {
+    return s.compare(0, prefix.length(), prefix) == 0;
+}
+
+bool has_prefix(const std::string& s, const char prefix) {
+    return s.length() > 0 && s.at(0) == prefix;
+}
+
 void trim_prefix(std::string& s, const std::string& prefix) {
-    if (s.compare(0, prefix.length(), prefix) == 0) {
+    if (has_prefix(s, prefix)) {
         s.erase(0, prefix.length());
     }
 }
 
-bool has_suffix(const std::string& s, const std::string suffix) {
+void trim_prefix(std::string& s, const char prefix) {
+    if (has_prefix(s, prefix)) {
+        s.erase(0, 1);
+    }
+}
+
+bool has_suffix(const std::string& s, const std::string& suffix) {
     return s.compare(s.length() - suffix.length(), suffix.length(), suffix) ==
            0;
+}
+
+bool has_suffix(const std::string& s, const char prefix) {
+    return s.length() > 0 && s.at(s.length() - 1) == prefix;
+}
+
+void trim_suffix(std::string& s, const char suffix) {
+    if (has_suffix(s, suffix)) {
+        s.pop_back();
+    }
 }
 
 void trim_suffix(std::string& s, const std::string& suffix) {
@@ -49,27 +73,48 @@ void trim_right(std::string& s, const std::string& cutset) {
             s.end());
 }
 
-void mul_1e6(std::string& n) {
-    if (n != "0") {
-        n += "000000";
-    }
+void trim_right(std::string& s, const char c) {
+    s.erase(std::find_if(s.rbegin(), s.rend(), [c](int ch) { return c != ch; })
+                .base(),
+            s.end());
 }
 
-void make_int(std::string& n) { n += "i"; }
+void trim_left(std::string& s, const std::string& cutset) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [&cutset](int ch) {
+                return cutset.find(ch) == std::string::npos;
+            }));
+}
 
-using VcFunc =
-    std::function<void(std::string&, const std::string&, char*, size_t)>;
+void trim_left(std::string& s, const char c) {
+    s.erase(s.begin(),
+            std::find_if(s.begin(), s.end(), [c](int ch) { return c != ch; }));
+}
+
+std::optional<std::string> find_line(const std::string& s,
+                                     const std::string& prefix) {
+    size_t i = 0, j = 0;
+    while ((i = s.find('\n', j)) != std::string::npos) {
+        auto line = s.substr(j, i - j);
+        if (has_prefix(line, prefix)) {
+            return line;
+        }
+        j = i + 1;
+    }
+    return {};
+}
+
+void mark_int(std::string& n) { n += "i"; }
+
+using VCFunc =
+    std::function<void(std::string&, const std::string&, char* buf, size_t)>;
 
 struct Cmd {
-    Cmd(const std::string name, const std::string arg,
-        void (*func)(std::string&, const std::string&, char*, size_t))
+    Cmd(const std::string name, const std::string arg, VCFunc func)
         : name(name), arg(arg), func(func) {}
-    Cmd(const std::string name,
-        void (*func)(std::string&, const std::string&, char*, size_t))
-        : name(name), func(func) {}
+    Cmd(const std::string name, VCFunc func) : name(name), func(func) {}
     std::string name;
     std::optional<std::string> arg;
-    void (*func)(std::string&, const std::string&, char*, size_t);
+    VCFunc func;
 };
 
 std::string hostname() {
@@ -104,11 +149,11 @@ void measure_clock(std::string& dst, const std::string& arg, char* buf,
     // frequency(dd)=ddddd.
 
     auto&& t = std::string(buf);
-    const auto i = t.find("=");
+    const auto i = t.find('=');
     if (i != std::string::npos) {
         t.erase(0, i + 1);
     }
-    make_int(t);
+    mark_int(t);
     dst += t;
 }
 
@@ -123,8 +168,8 @@ void measure_volts(std::string& dst, const std::string& arg, char* buf,
         throw std::runtime_error("unable to parse vc_gencmd output");
     }
     auto&& t = std::string(val, (size_t)n);
-    trim_suffix(t, "V");
-    trim_right(t, "0");
+    trim_suffix(t, 'V');
+    trim_right(t, '0');
     dst += t;
 }
 
@@ -139,8 +184,10 @@ void get_config(std::string& dst, const std::string& arg, char* buf,
         throw std::runtime_error("unable to parse vc_gencmd output");
     }
     auto&& t = std::string(val, n);
-    mul_1e6(t);
-    make_int(t);
+    if (t != "0") {
+        t += "000000";
+    }
+    mark_int(t);
     dst += t;
 }
 
@@ -154,13 +201,69 @@ void get_mem(std::string& dst, const std::string& arg, char* buf, size_t len) {
         throw std::runtime_error("unable to parse vc_gencmd output");
     }
     auto&& t = std::string(val, (size_t)n);
-    trim_suffix(t, "M");
+    trim_suffix(t, 'M');
     if (t != "0") {
         t += "000000i";
     } else {
-        t += "i";
+        t += 'i';
     }
     dst += t;
+}
+
+void mem_oom_count(std::string& dst, const std::string&, char* buf,
+                   size_t len) {
+    if (vc_gencmd(buf, len, "mem_oom")) {
+        throw std::runtime_error("unable to measure OOM errors");
+    }
+    static const std::string prefix = "oom events";
+    auto&& line = find_line(std::string(buf), prefix);
+    if (!line.has_value()) {
+        throw std::runtime_error("unable to find '" + prefix + "' line");
+    }
+    auto&& t = line.value();
+    trim_prefix(t, prefix);
+    trim_prefix(t, ':');
+    trim_left(t, ' ');
+    mark_int(t);
+    dst += t;
+}
+
+void mem_oom_ms(std::string& dst, const std::string&, char* buf, size_t len) {
+    if (vc_gencmd(buf, len, "mem_oom")) {
+        throw std::runtime_error("unable to measure time spent in OOM handler");
+    }
+    static const std::string prefix = "total time in oom handler";
+    auto&& line = find_line(std::string(buf), prefix);
+    if (!line.has_value()) {
+        throw std::runtime_error("unable to find '" + prefix + "' line");
+    }
+    auto&& t = line.value();
+    trim_prefix(t, prefix);
+    trim_prefix(t, ':');
+    trim_left(t, ' ');
+    trim_suffix(t, " ms");
+    mark_int(t);
+    dst += t;
+}
+
+VCFunc mem_reloc_stats(const std::string& prefix) {
+    auto fn = [=](std::string& dst, const std::string&, char* buf,
+                  size_t len) -> void {
+        if (vc_gencmd(buf, len, "mem_reloc_stats")) {
+            throw std::runtime_error("unable to measure memory reloc stats");
+        }
+        auto&& line = find_line(std::string(buf), prefix);
+        if (!line.has_value()) {
+            throw std::runtime_error("unable to find '" + prefix + "' line");
+        }
+        auto&& t = line.value();
+        trim_prefix(t, prefix);
+        trim_prefix(t, ':');
+        trim_left(t, ' ');
+        mark_int(t);
+        dst += t;
+    };
+    return fn;
 }
 
 const std::map<std::string, Cmd> cmds = {
@@ -196,13 +299,15 @@ const std::map<std::string, Cmd> cmds = {
     {"reloc_total_mem", Cmd("get_mem", "reloc_total", get_mem)},
     {"reloc_mem", Cmd("get_mem", "reloc", get_mem)},
 
-    // TODO(eric): implement these
-    /* {"oom_c", Cmd("mem_oom", ...)}, */
-    /* {"oom_t", Cmd("mem_oom", ...)}, */
-    /* */
-    /* {"mem_reloc_alloc_fail_c", Cmd("mem_reloc_stats", ...)}, */
-    /* {"mem_reloc_compact_c", Cmd("mem_reloc_stats", ...)}, */
-    /* {"mem_reloc_leg_blk_fail_C", Cmd("mem_reloc_stats", ...)}, */
+    {"oom_count", Cmd("mem_oom", mem_oom_count)},
+    {"oom_ms", Cmd("mem_oom", mem_oom_ms)},
+
+    {"mem_reloc_allocation_failures",
+     Cmd("mem_reloc_stats", mem_reloc_stats("alloc failures"))},
+    {"mem_reloc_compactions",
+     Cmd("mem_reloc_stats", mem_reloc_stats("compactions"))},
+    {"mem_reloc_legacy_block_failures",
+     Cmd("mem_reloc_stats", mem_reloc_stats("legacy block fails"))},
 };
 
 const struct option long_opts[] = {{"step", required_argument, NULL, 's'},
@@ -249,24 +354,24 @@ int main(int argc, char* argv[]) {
         // Measurement and tag set.
         buf += "raspberry_pi,host=";
         buf += host;
-        buf += " ";
+        buf += ' ';
 
         // Field set.
         for (const auto& [key, val] : cmds) {
             buf += key;
-            buf += "=";
+            buf += '=';
 
             try {
                 val.func(buf, val.arg.value_or(""), tmp, N);
             } catch (const std::exception& e) {
                 fatal(e.what());
             }
-            buf += ",";
+            buf += ',';
         }
-        trim_suffix(buf, ",");
+        trim_suffix(buf, ',');
 
         // Timestamp.
-        buf += " ";
+        buf += ' ';
         buf += std::to_string(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::high_resolution_clock::now().time_since_epoch())

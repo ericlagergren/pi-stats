@@ -7,7 +7,7 @@ DEST=/usr/local/bin
 
 .PHONY: all install install-service install-logrot clean
 
-default: $(TARGET) clean
+default: $(TARGET)
 all: install install-service install-logrot clean
 
 OBJECT=$(TARGET).o
