@@ -5,9 +5,10 @@ LDFLAGS=-L/opt/vc/lib -lbcm_host -lvcos -lvchiq_arm
 TARGET=pi-stats
 DEST=/usr/local/bin
 
-.PHONY: all install clean
+.PHONY: all install install-service install-logrot clean
 
-all: $(TARGET)
+default: $(TARGET) clean
+all: install install-service install-logrot clean
 
 OBJECT=$(TARGET).o
 
@@ -18,7 +19,13 @@ $(TARGET): $(OBJECT)
 
 install: $(TARGET)
 	mkdir -p $(DEST)
-	cp $< $(DEST)/$(TARGET)
+	mv $< $(DEST)/$(TARGET)
+
+install-service: $(TARGET)
+	cp $(TARGET).service /etc/systemd/system
+
+install-logrot: $(TARGET)
+	cp $(TARGET).conf /etc/logrotate.d/pi-stats
 
 clean:
 	$(RM) *~ *.o $(TARGET)
