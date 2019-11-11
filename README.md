@@ -14,4 +14,8 @@ to stdout using InfluxDB's line protocol[0].
 By default, `pi-stats` reads from VideoCore once per second. This can be
 configured with the `-s` flag, which is the number of seconds between reads.
 
+The stats are written to `/var/log/pi-stats.log`, which can then be parsed by
+Telegraf[1].
+
 [0]: https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
+[1]: https://www.influxdata.com/time-series-platform/telegraf/
