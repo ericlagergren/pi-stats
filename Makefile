@@ -2,8 +2,8 @@ CC=g++
 CFLAGS=-std=c++17 -O2 -Wall -Wextra -pedantic \
 	   -I/opt/vc/include
 LDFLAGS=-L/opt/vc/lib -lbcm_host -lvcos -lvchiq_arm
-TARGET=rpi-stats
-DEST=$(HOME)/.local/bin
+TARGET=pi-stats
+DEST=/usr/local/bin
 
 .PHONY: all install clean
 

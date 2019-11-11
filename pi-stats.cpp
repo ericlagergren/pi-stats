@@ -3,10 +3,10 @@
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_map>
 
 using namespace std::chrono_literals;
 
@@ -72,21 +72,12 @@ struct Cmd {
     void (*func)(std::string&, const std::string&, char*, size_t);
 };
 
-void hostname(std::string& dst, const std::string&, char* buf, size_t len) {
-    auto buf_ = buf;
-    if (len < HOST_NAME_MAX) {
-        buf_ = (char*)calloc(HOST_NAME_MAX, 1);
-    } else {
-        buf_[len - 1] = '\0';
+std::string hostname() {
+    auto buf = (char*)calloc(HOST_NAME_MAX, 1);
+    if (gethostname(buf, HOST_NAME_MAX - 1)) {
+        return "???";
     }
-    if (gethostname(buf_, HOST_NAME_MAX - 1)) {
-        dst += "???";
-    } else {
-        dst += std::string(buf_);
-    }
-    if (buf != buf_) {
-        free(buf_);
-    }
+    return std::string(buf);
 }
 
 void measure_temp(std::string& dst, const std::string&, char* buf, size_t len) {
@@ -100,8 +91,6 @@ void measure_temp(std::string& dst, const std::string&, char* buf, size_t len) {
     }
     auto&& t = std::string(val, (size_t)n);
     trim_suffix(t, "'C");
-    trim_right(t, "0");
-    trim_suffix(t, ".");
     dst += t;
 }
 
@@ -119,7 +108,6 @@ void measure_clock(std::string& dst, const std::string& arg, char* buf,
     if (i != std::string::npos) {
         t.erase(0, i + 1);
     }
-    mul_1e6(t);
     make_int(t);
     dst += t;
 }
@@ -175,9 +163,7 @@ void get_mem(std::string& dst, const std::string& arg, char* buf, size_t len) {
     dst += t;
 }
 
-const std::unordered_map<std::string, Cmd> cmds = {
-    {"host", Cmd("hostname", hostname)},
-
+const std::map<std::string, Cmd> cmds = {
     {"soc_temp", Cmd("measure_temp", measure_temp)},
 
     {"arm_freq", Cmd("measure_clock", "arm", measure_clock)},
@@ -254,14 +240,19 @@ int main(int argc, char* argv[]) {
     VCHI_CONNECTION_T* vchi_connection = NULL;
     vc_vchi_gencmd_init(vchi_instance, &vchi_connection, 1);
 
+    auto host = hostname();
+
+    constexpr size_t N = 4096;
+    char tmp[N];
     std::string buf;
     while (true) {
-        buf += "raspberry_pi";
+        // Measurement and tag set.
+        buf += "raspberry_pi,host=";
+        buf += host;
+        buf += " ";
 
-        constexpr size_t N = 4096;
-        char tmp[N];
+        // Field set.
         for (const auto& [key, val] : cmds) {
-            buf += ",";
             buf += key;
             buf += "=";
 
@@ -270,7 +261,17 @@ int main(int argc, char* argv[]) {
             } catch (const std::exception& e) {
                 fatal(e.what());
             }
+            buf += ",";
         }
+        trim_suffix(buf, ",");
+
+        // Timestamp.
+        buf += " ";
+        buf += std::to_string(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::high_resolution_clock::now().time_since_epoch())
+                .count());
+
         std::cout << buf << std::endl;
         buf.clear();
 
