@@ -357,10 +357,11 @@ int main(int argc, char* argv[]) {
         buf += ' ';
 
         // Field set.
-        for (const auto& [key, val] : cmds) {
-            buf += key;
+        for (const auto& e : cmds) {
+            buf += e.first;
             buf += '=';
 
+            auto&& val = e.second;
             try {
                 val.func(buf, val.arg.value_or(""), tmp, N);
             } catch (const std::exception& e) {
