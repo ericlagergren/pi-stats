@@ -173,11 +173,6 @@ void measure_volts(std::string& dst, const std::string& arg, char* buf,
     dst += t;
 }
 
-
-bool test_bits(unsigned int value, unsigned int bits) {
-    return ((value & bits) == bits);
-}
-
 /*
     var underVoltage            = (number >> 0)  & 1 ? true : false;
     var frequencyCapped         = (number >> 1)  & 1 ? true : false;
