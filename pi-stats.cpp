@@ -189,7 +189,9 @@ bool test_bits(unsigned int value, unsigned int bits) {
     var softTempLimitOccurred   = (number >> 19) & 1 ? true : false;
 */
 std::map<std::string,int> getThrottledFlags(unsigned int value) {
+
     std::map<std::string,int> flags;
+
     flags[std::string("under_voltage")]     = (value >> 0) & 1;
     flags[std::string("frequency_cap")]     = (value >> 1) & 1;
     flags[std::string("throttled")]         = (value >> 2) & 1;
@@ -316,7 +318,7 @@ const std::map<std::string, Cmd> cmds = {
     {"soc_temp", Cmd("measure_temp", measure_temp)},
     {"arm_freq", Cmd("measure_clock", "arm", measure_clock)},
     {"core_freq", Cmd("measure_clock", "core", measure_clock)},
-/*
+
     {"h264_freq", Cmd("measure_clock", "h264", measure_clock)},
     {"isp_freq", Cmd("measure_clock", "isp", measure_clock)},
     {"v3d_freq", Cmd("measure_clock", "v3d", measure_clock)},
@@ -354,7 +356,7 @@ const std::map<std::string, Cmd> cmds = {
      Cmd("mem_reloc_stats", mem_reloc_stats("compactions"))},
     {"mem_reloc_legacy_block_failures",
      Cmd("mem_reloc_stats", mem_reloc_stats("legacy block fails"))},
-*/
+
     {"under_voltage_occurred", Cmd("get_throttled", "under_voltage_occurred", get_throttled)},
     {"frequency_cap_occurred", Cmd("get_throttled", "frequency_cap_occurred", get_throttled)},
     {"throttled_occurred", Cmd("get_throttled", "throttled_occurred", get_throttled)},
