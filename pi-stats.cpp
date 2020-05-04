@@ -173,6 +173,49 @@ void measure_volts(std::string& dst, const std::string& arg, char* buf,
     dst += t;
 }
 
+/*
+    var underVoltage            = (number >> 0)  & 1 ? true : false;
+    var frequencyCapped         = (number >> 1)  & 1 ? true : false;
+    var throttled               = (number >> 2)  & 1 ? true : false;
+    var softTempLimit           = (number >> 3)  & 1 ? true : false;
+    var underVoltageOccurred    = (number >> 16) & 1 ? true : false;
+    var frequencyCappedOccurred = (number >> 17) & 1 ? true : false;
+    var throttledOccurred       = (number >> 18) & 1 ? true : false;
+    var softTempLimitOccurred   = (number >> 19) & 1 ? true : false;
+*/
+std::map<std::string,int> getThrottledFlags(unsigned int value) {
+
+    std::map<std::string,int> flags;
+
+    flags[std::string("under_voltage")]     = (value >> 0) & 1;
+    flags[std::string("frequency_cap")]     = (value >> 1) & 1;
+    flags[std::string("throttled")]         = (value >> 2) & 1;
+    flags[std::string("soft_temp_limit")]   = (value >> 3) & 1;
+    flags[std::string("under_voltage_occurred")]    = (value >> 16) & 1;
+    flags[std::string("frequency_cap_occurred")]    = (value >> 17) & 1;
+    flags[std::string("throttled_occurred")]        = (value >> 18) & 1;
+    flags[std::string("soft_temp_limit_occurred")]  = (value >> 19) & 1;
+
+    return flags;
+}
+
+void get_throttled(std::string& dst, const std::string& arg, char* buf,
+                   size_t len) {
+    if (vc_gencmd(buf, len, "get_throttled")) {
+        throw std::runtime_error("unable to get CPU throttling information");
+    }
+    int n;
+    char* val;
+    if (vc_gencmd_string_property(buf, "throttled", &val, &n) == 0) {
+        throw std::runtime_error("unable to parse vc_gencmd output");
+    }
+    unsigned int flags = std::stoul(val, nullptr, 16);
+    std::map<std::string,int> map = getThrottledFlags(flags);
+
+    auto search = map.find(arg);
+    dst += std::to_string(search->second);
+}
+
 void get_config(std::string& dst, const std::string& arg, char* buf,
                 size_t len) {
     if (vc_gencmd(buf, len, "%s %s", "get_config", arg.c_str())) {
@@ -268,9 +311,9 @@ VCFunc mem_reloc_stats(const std::string& prefix) {
 
 const std::map<std::string, Cmd> cmds = {
     {"soc_temp", Cmd("measure_temp", measure_temp)},
-
     {"arm_freq", Cmd("measure_clock", "arm", measure_clock)},
     {"core_freq", Cmd("measure_clock", "core", measure_clock)},
+
     {"h264_freq", Cmd("measure_clock", "h264", measure_clock)},
     {"isp_freq", Cmd("measure_clock", "isp", measure_clock)},
     {"v3d_freq", Cmd("measure_clock", "v3d", measure_clock)},
@@ -308,6 +351,16 @@ const std::map<std::string, Cmd> cmds = {
      Cmd("mem_reloc_stats", mem_reloc_stats("compactions"))},
     {"mem_reloc_legacy_block_failures",
      Cmd("mem_reloc_stats", mem_reloc_stats("legacy block fails"))},
+
+    {"under_voltage_occurred", Cmd("get_throttled", "under_voltage_occurred", get_throttled)},
+    {"frequency_cap_occurred", Cmd("get_throttled", "frequency_cap_occurred", get_throttled)},
+    {"throttled_occurred", Cmd("get_throttled", "throttled_occurred", get_throttled)},
+    {"soft_temp_limit_occurred", Cmd("get_throttled", "soft_temp_limit_occurred", get_throttled)},
+    {"under_voltage", Cmd("get_throttled", "under_voltage", get_throttled)},
+    {"frequency_cap", Cmd("get_throttled", "frequency_cap", get_throttled)},
+    {"throttled", Cmd("get_throttled", "throttled", get_throttled)},
+    {"soft_temp_limit", Cmd("get_throttled", "soft_temp_limit", get_throttled)},
+ 
 };
 
 const struct option long_opts[] = {{"step", required_argument, NULL, 's'},
@@ -390,3 +443,4 @@ int main(int argc, char* argv[]) {
         fatal("VCHI disconnect failed");
     }
 }
+
